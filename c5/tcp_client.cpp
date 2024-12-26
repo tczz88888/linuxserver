@@ -29,10 +29,8 @@ int main(int argc,char *argv[]){
         printf("connect failed\n");
     }
     else{
-        const char *oob_data="123"; 
         const char *normal_data="abc"; 
         send(sockfd, normal_data, strlen(normal_data), 0);
-        send(sockfd, oob_data, strlen(oob_data), MSG_OOB);
         send(sockfd,normal_data, strlen(normal_data), 0);
     }
     close(sockfd);

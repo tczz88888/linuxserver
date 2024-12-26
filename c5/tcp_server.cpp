@@ -65,7 +65,8 @@ int main(int argc,char *argv[]){
     ret=listen(sockfd, 5);//设置监听
     struct sockaddr_in client;
     socklen_t client_len=sizeof(client);
-    int connfd=accept(sockfd, (struct sockaddr *)&client, &client_len);
+    //int connfd=accept(sockfd, (struct sockaddr *)&client, &client_len);
+    int connfd=1;
     if(connfd==-1){
         printf("connect failed %d\n",errno);
     }
@@ -80,16 +81,17 @@ int main(int argc,char *argv[]){
         ret=recv(connfd, buf, BUF_SIZE-1, 0);
         printf("byte1=%d data1=%s\n",ret,buf);
         
-        memset(buf, '\0', BUF_SIZE);
-        ret=recv(connfd, buf, BUF_SIZE-1,MSG_OOB);
-        printf("byte2=%d data2=%s\n",ret,buf);
+
 
         memset(buf, '\0', BUF_SIZE);
         ret=recv(connfd, buf, BUF_SIZE-1, 0);
-        printf("byte2=%d data2=%s\n",ret,buf);
+        printf("byte3=%d data3=%s\n",ret,buf);
+
+
 
 
     }
+    close(connfd);
     close(sockfd);
     return 0;
 }
