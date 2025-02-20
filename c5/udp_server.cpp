@@ -35,6 +35,18 @@ int  listen(int sockfd,int backlog)
 2.2之前backlog是半连接和全连接的总和，2.2之后只是全连接
 */
 
+/*
+ssize_t sendto(int sockfd, const void *buf, size_t len, int flags,
+                      const struct sockaddr *dest_addr, socklen_t addrlen);
+一般用于udp，不过如果最后两个参数设置为NULL，也可以用于tcp，这个函数好像没什么好说的，dest_addr表示要发送到的sockaddr
+
+*/
+
+/*
+ssize_t recvfrom(int sockfd, void *buf, size_t len, int flags,
+                        struct sockaddr *src_addr, socklen_t *addrlen);
+src_addr和*addrlen存信息的发送者的sockaddr和对应的长度
+*/
 static bool stop = false; //如果捕获到SIGTERM信号就结束监听
 static void handle_term(int sig) { stop = true; }
 const int BUF_SIZE = 1024;

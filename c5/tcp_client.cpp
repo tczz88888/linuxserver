@@ -2,6 +2,7 @@
 
 
 #include <arpa/inet.h>
+#include <asm-generic/socket.h>
 #include <cassert>
 #include <cerrno>
 #include <cstdio>
@@ -25,13 +26,18 @@ int main(int argc,char *argv[]){
     inet_pton(AF_INET ,ip, &address.sin_addr);
     int sockfd=socket(PF_INET, SOCK_STREAM, 0);
     assert(sockfd>=0);
+    int sendbuf = 50;
+  socklen_t len = sizeof(sendbuf);
+  setsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, &sendbuf, sizeof(sendbuf));
+  getsockopt(sockfd, SOL_SOCKET, SO_SNDBUF, &sendbuf, &len);
+  printf("sendbuf=%d\n", sendbuf);
     if(connect(sockfd, (struct sockaddr*)&address, sizeof(address))<0){
         printf("connect failed\n");
     }
     else{
-        const char *normal_data="abc"; 
-        send(sockfd, normal_data, strlen(normal_data), 0);
-        send(sockfd,normal_data, strlen(normal_data), 0);
+        char data[10000]; 
+        memset(data, 'a', 10000);
+        send(sockfd, data, 10000, 0);
     }
     close(sockfd);
     return 0;
