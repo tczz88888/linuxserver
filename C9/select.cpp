@@ -24,7 +24,8 @@ void FD_ZERO(fd_set *set);清除fd_set的所有位
 #include <poll.h>
 
        int poll(struct pollfd *fds, nfds_t nfds, int timeout);
-       参数: fds是一个链表，每个节点保存着一个文件描述符的信息，nfds同上，timeout是超时时间，单位ms
+       参数:
+fds是一个链表，每个节点保存着一个文件描述符的信息，nfds同上，timeout是超时时间，单位ms
        struct pollfd {
                int   fd;        文件描述符
                short events;     监听的事件
@@ -71,25 +72,32 @@ int main(int argc, char *argv[]) {
     printf("connect failed\n");
     exit(1);
   } else {
-    fd_set read_fds;
-    fd_set write_fds;
-    fd_set except_fds;
-    timeval tle;
-    FD_ZERO(&read_fds);
-    FD_ZERO(&write_fds);
-    FD_ZERO(&except_fds);
-    FD_SET(connfd, &read_fds);
-    tle.tv_sec = 100;
-    tle.tv_usec = 0;
-    int ok = select(connfd + 1, &read_fds, &write_fds, &except_fds, &tle);
-    if (FD_ISSET(connfd, &read_fds)) {
-     int sum=0;
-      while ((len = recv(connfd, buffer, sizeof(buffer),0)) > 0) {
-        printf("%d\n",len);
-        sum+=len;
+    while (1) {
+      fd_set read_fds;
+      fd_set write_fds;
+      fd_set except_fds;
+      timeval tle;
+      FD_ZERO(&read_fds);
+      FD_ZERO(&write_fds);
+      FD_ZERO(&except_fds);
+      FD_SET(connfd, &read_fds);
+      tle.tv_sec = 100;
+      tle.tv_usec = 0;
+      int ok = select(connfd + 1, &read_fds, &write_fds, &except_fds, &tle);
+      if (FD_ISSET(connfd, &read_fds)) {
+        int sum = 0;
+        memset(buffer, '\0', sizeof(buffer));
+        len = recv(connfd, buffer + sum, sizeof(buffer) - 1, 0);
+        if (len <= 0) {
+          printf("client closed connection\n");
+          break;
+        } else {
+          printf("recv from client: %s", buffer);
+          send(connfd, buffer, strlen(buffer), 0);
+        }
       }
-      printf("%d\n",sum);
     }
   }
+  close(sockfd);
   return 0;
 }
