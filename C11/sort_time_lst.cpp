@@ -20,7 +20,7 @@
 class util_timer;
 
 
-class client_data{
+class client_data{//如何才能向一个链接发送数据呢，肯定要一个sockfd一个buf，然后用util_timer做计时器，并且存一下对应的sockaddr
     public:
     sockaddr_in client_addr;
     int sockfd;
@@ -28,7 +28,7 @@ class client_data{
     util_timer *timer;
 };
 
-class util_timer{
+class util_timer{//计时器，需要一个超时时间，指向前驱和后继的指针，一个callback用于到期后的处理，需要一个client才知道通知谁到期了
     public:
         time_t expire;
         util_timer * pre;
