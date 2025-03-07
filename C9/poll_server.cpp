@@ -16,7 +16,7 @@
 #include <sys/socket.h>
 #include <unistd.h>
 const int BUFFER_SIZE = 1000;
-const int MAX_USER = 150;
+const int MAX_USER = 2;
 const int MAX_FD = 150;
 
 int num[MAX_FD], cnt = 0;
@@ -24,10 +24,10 @@ pollfd events[MAX_FD];
 class User {
 public:
   sockaddr_in addr;
-  char *buffer;
-  ~User() { delete buffer; }
+  char *wbuffer;
+  char rbuffer[BUFFER_SIZE];
 };
-User user[MAX_USER];
+User *user;
 int setNoBlocking(int fd) {
   int oldop = fcntl(fd, F_GETFL);
   int newop = oldop | O_NONBLOCK;
@@ -60,9 +60,10 @@ int main(int argc, char *argv[]) {
   events[0].fd = listenfd;
   events[0].events = POLLIN;
   events[0].revents = 0;
-  cnt = 1;
+  cnt = 0;
+  user=new User[MAX_USER+1];
   while (1) {
-    int ret = poll(events, cnt + 1, 1);
+    int ret = poll(events, cnt + 1, -1);
     if (ret < 0) {
       printf("poll failure\n");
       break;
@@ -84,14 +85,13 @@ int main(int argc, char *argv[]) {
           }
           cnt++;
           user[connfd].addr = client_addr;
-          user[connfd].buffer = new char[BUFFER_SIZE];
 
           events[cnt].fd = connfd;
-          events[cnt].events = POLLIN | POLLHUP | POLLERR;
+          events[cnt].events = POLLIN | POLLERR | POLLRDHUP;
           events[cnt].revents = 0;
 
           setNoBlocking(connfd);
-          printf("come a new user,now have %d users\n", cnt);
+          printf("come a new user %d,now have %d users\n", connfd,cnt);
         } else if (events[i].revents & POLLERR) {
           printf("get error from fd %d\n", events[i].fd);
           char errors[100];
@@ -102,39 +102,56 @@ int main(int argc, char *argv[]) {
             printf("get socket option failed\n");
           }
           continue;
-        } else if (events[i].revents & POLLHUP) {
-          user[events[i].fd] = user[cnt];
-          close(events[i].fd);
-          --cnt;
+        } else if (events[i].revents & POLLRDHUP) {
+          printf("hup a client left %d\n",events[i].fd);
+          close(events[i].fd); 
+          user[events[i].fd] = user[events[cnt].fd];
           events[i] = events[cnt];
           --i;
-          printf("a client left\n");
+          --cnt;
+          
         } else if (events[i].revents & POLLIN) {
           int connfd = events[i].fd;
-          memset(user[connfd].buffer, '\0', BUFFER_SIZE);
-          ret = recv(connfd, user[connfd].buffer, BUFFER_SIZE - 1, 0);
+          memset(user[connfd].rbuffer, '\0', BUFFER_SIZE);
+          ret = recv(connfd, user[connfd].rbuffer, BUFFER_SIZE - 1, 0);
           if (ret < 0) {
             if (errno != EAGAIN) {
-              user[events[i].fd] = user[cnt];
+            printf("error a client left %d\n",events[i].fd);
               close(events[i].fd);
-              --cnt;
+              user[events[i].fd] = user[events[cnt].fd];
               events[i] = events[cnt];
               --i;
-              printf("a client left\n");
+              --cnt;
             }
           }
           else if(ret==0){
 
           }
           else{
-
+            for(int j=1;j<=cnt;j++){
+                if(events[j].fd!=connfd){
+                    user[events[j].fd].wbuffer=user[connfd].rbuffer;
+                    events[j].events|=~POLLIN;
+                    events[j].events|=POLLOUT;
+                }
+            }
+            printf("recv from client: %s\n",user[connfd].rbuffer);
           }
         }
         else if(events[i].revents&POLLOUT){
-
+            int connfd=events[i].fd;
+            if(!user[connfd].wbuffer) {
+              continue;
+            }
+            ret=send(connfd, user[connfd].wbuffer, strlen(user[connfd].wbuffer), 0);
+            printf("send to%d\n",connfd);
+            user[connfd].wbuffer=NULL;
+            events[i].events|=~POLLOUT;
+            events[i].events|=POLLIN;
         }
       }
     }
   }
+  delete [] user;
   return 0;
 }

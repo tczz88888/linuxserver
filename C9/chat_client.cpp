@@ -48,6 +48,7 @@ int main(int argc,char *argv[]){
             printf("poll failure\n");
             break;
         }
+
         if(fds[1].revents&POLLRDHUP){
             printf("server close connection\n");
             break;
@@ -55,10 +56,10 @@ int main(int argc,char *argv[]){
         else if(fds[1].revents&POLLIN){
             memset(data, '\0', sizeof(data));
             recv(sockfd, data, sizeof(data)-1, 0);
-            printf("recv from server :%s",data);
+            printf("recv from server :%s\n",data);
         }
 
-        if(fds[0].events&POLLIN){
+        if(fds[0].revents&POLLIN){
         //    ret=splice(0, NULL,sockfd, NULL, 32768, SPLICE_F_MORE|SPLICE_F_MOVE);
 
             ret=splice(0, NULL,pfd[1], NULL, 32768, SPLICE_F_MORE|SPLICE_F_MOVE);
