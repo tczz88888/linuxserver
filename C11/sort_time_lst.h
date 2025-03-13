@@ -64,6 +64,24 @@ class sort_time_lst{
             add_timer(timer,head);
         }
 
+        void adjust_timer(util_timer *timer){
+            if(!timer) return ;
+            util_timer *tmp=timer->nxt;
+            if((!tmp)||(timer->expire<tmp->expire)){
+                return ;
+            }
+            if(timer==head){
+                head=timer->nxt;
+                timer->nxt=timer->pre=nullptr;
+                add_timer(timer, head);
+            }
+            else{
+                timer->nxt->pre=timer->pre;
+                timer->pre->nxt=timer->nxt;
+                add_timer(timer,timer->nxt);
+            }
+        }
+
         void delete_timer(util_timer *timer){
             if(!timer) return ;
             if((timer==head)&&(timer==tail)){
