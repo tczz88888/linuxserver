@@ -14,16 +14,17 @@
 #include <sys/socket.h>
 #include <unistd.h>
 #include <pthread.h>
-#include "sort_time_lst.h"
+#include "timer_heap.h"
 #include <fcntl.h>
 #include <errno.h>
 
 const int MAX_EVENTS=15;
 const int MAX_FDS=20;
 const int TIMESLOT=5;
+const int DEFAULT_HEAP_SIZE=20;
 client_data *users;
 epoll_event *events;
-static sort_time_lst timer_lst;
+static timer_heap heap(DEFAULT_HEAP_SIZE);
 static int pipefd[2];//用来获取信号的信息
 static int epollfd=0;
 static int user_cnt=0;
@@ -61,7 +62,7 @@ void addsig(int sig){
 }
 
 void timer_handler(){
-    timer_lst.tick();
+    heap.tick();
     alarm(TIMESLOT);
 }
 
@@ -121,19 +122,22 @@ int main(int argc,char *argv[]){
             int sockfd=events[i].data.fd;
             if(sockfd==listenfd){
                 sockaddr_in client_addr;
-                socklen_t cilent_len;
+                socklen_t cilent_len=sizeof(client_addr);
                 int connfd=accept(listenfd, (sockaddr *)&client_addr, &cilent_len);
+                if(connfd==-1){
+                    printf("%d %d\n",listenfd,errno);
+                    return -1;
+                }
+                printf("client connect %d\n",connfd);
                 addfd(epollfd, connfd);
                 users[connfd].client_addr=client_addr;
                 users[connfd].sockfd=connfd;
 
-                util_timer *client_timer=new util_timer();
+                heap_timer *client_timer=new heap_timer(3*TIMESLOT);
                 client_timer->user_data=&users[connfd];
-                time_t cur=time(nullptr);
-                client_timer->expire=cur+3*TIMESLOT;
                 client_timer->cb_func=cb_func;
                 users[connfd].timer=client_timer;
-                timer_lst.add_timer(client_timer);
+                heap.add_timer(client_timer);
             }
             else if(sockfd==pipefd[0]&&(events[i].events&EPOLLIN)){
                 int sig;
@@ -166,27 +170,26 @@ int main(int argc,char *argv[]){
             else if(events[i].events&EPOLLIN){
                 memset(users[sockfd].buf, '\0', BUFFER_SIZE);
                 ret=recv(sockfd, users[sockfd].buf, BUFFER_SIZE-1, 0);
-                util_timer *timer=users[sockfd].timer;
+                heap_timer *timer=users[sockfd].timer;
                 if(ret<0){
                     if(errno!=EAGAIN){
                         cb_func(&users[sockfd]);
                         if(timer){
-                            timer_lst.delete_timer(timer);
+                            heap.delete_timer(timer);
                         }
                     }
                 }
                 else if(ret==0){
                     cb_func(&users[sockfd]);
                     if(timer){
-                            timer_lst.delete_timer(timer);
+                            heap.delete_timer(timer);
                     }
                 }
                 else{
                     if(timer){
-                        time_t cur=time(nullptr);
-                        timer->expire=cur+3*TIMESLOT;
+                        int delay=3*TIMESLOT;
                         printf("get info %s frmo fd %d ,adjust timer once\n",users[sockfd].buf,sockfd);
-                        timer_lst.adjust_timer(timer);
+                        heap.adjust_timer(timer,delay);
                     }
                 }
             }
