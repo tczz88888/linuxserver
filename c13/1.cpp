@@ -215,7 +215,45 @@ int main(int argc,char *argv[]){
             int sockfd=event[i].data.fd;
 
             if(sockfd==listenfd){
+                sockaddr_in client_addr;
+                socklen_t cilent_len;
+                int connfd=accept(listenfd, (sockaddr *)&client_addr, &cilent_len);
+                assert(connfd>=0);
+                if(user_count>=USER_LIMIT){
+                    const char *message="too many users";
+                    send(connfd, message, strlen(message), 0);
+                    printf("%s\n",message);
+                    close(connfd);
+                    continue;
+                }
+                users[user_count].address=client_addr;
+                users[user_count].connfd=connfd;
+                int tmp=socketpair(PF_INET, SOCK_STREAM, 0, users[user_count].pipefd);
+                assert(tmp!=-1);
 
+                pid_t pid=fork();
+                if(pid<0){
+                    close(connfd);
+                    continue;
+                }
+                else if(pid==0){
+                    close(epollfd);
+                    close(listenfd);
+                    close(users[user_count].pipefd[0]);
+                    close(sig_pipefd[0]);
+                    close(sig_pipefd[1]);
+                    run_child(user_count, users, share_mem);
+                    munmap((void*)share_mem, USER_LIMIT*BUFFER_SIZE);
+                    exit(0);
+                }
+                else{
+                    close(connfd);
+                    close(users[user_count].pipefd[0]);
+                    close(users[user_count].pipefd[1]);
+                    users[user_count].pid=pid;
+                    sub_process[pid]=user_count;
+                    user_count++;
+                }
             }
             else if(sockfd==sig_pipefd[0]&&(event[i].events&EPOLLIN)){
 
