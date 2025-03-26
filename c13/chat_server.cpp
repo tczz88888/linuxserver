@@ -16,6 +16,7 @@
 #include <unistd.h>
 #include <sys/mman.h>
 #include <sys/stat.h> 
+#include <sys/wait.h> 
 #include <arpa/inet.h>
 #define USER_LIMIT 5
 #define BUFFER_SIZE 1024
@@ -89,6 +90,7 @@ void child_term_handler(int sig){
 }
 
 int run_child(int idx,client_data *users,char *share_mem){
+    puts("new child");
     epoll_event event[MAX_EVENT_NUMBER];
     int child_epollfd=epoll_create(5);
     assert(child_epollfd!=-1);
@@ -105,7 +107,6 @@ int run_child(int idx,client_data *users,char *share_mem){
             printf("child epoll failure\n");
             break;
         }
-
         for(int i=0;i<ret;i++){
             int sockfd=event[i].data.fd;
             if(sockfd==connfd&&(event[i].events&EPOLLIN)){
@@ -135,6 +136,7 @@ int run_child(int idx,client_data *users,char *share_mem){
                     stop_child=true;
                 }
                 else{
+                    puts("sendmsg");
                     send(connfd, share_mem+client*BUFFER_SIZE , BUFFER_SIZE , 0);
                 }
             }
@@ -145,7 +147,9 @@ int run_child(int idx,client_data *users,char *share_mem){
     }
     close(child_epollfd);
     close(pipefd);
+    puts("close1");
     close(connfd);
+    puts("child died");
     return 0;
 }
 
@@ -166,6 +170,10 @@ int main(int argc,char *argv[]){
     
     listenfd=socket(PF_INET,SOCK_STREAM,0);
     assert(listenfd>=0);
+
+    int opt = 1;
+    setsockopt( listenfd, SOL_SOCKET,SO_REUSEADDR, 
+					(const void *)&opt, sizeof(opt) );
     int ret=bind(listenfd, (sockaddr *)&server_addr, sizeof(server_addr));
     assert(ret!=-1);
 
@@ -206,8 +214,8 @@ int main(int argc,char *argv[]){
 
     while(!stop_server){
         ret=epoll_wait(epollfd, event, MAX_EVENT_NUMBER, -1);
-        if(ret<0&&!(errno!=EINTR)){
-            printf("epoll failure\n");
+        if(ret<0&&(errno!=EINTR)){
+            printf("epoll failure %d\n",errno);
             break;
         }
         
@@ -228,7 +236,7 @@ int main(int argc,char *argv[]){
                 }
                 users[user_count].address=client_addr;
                 users[user_count].connfd=connfd;
-                int tmp=socketpair(PF_INET, SOCK_STREAM, 0, users[user_count].pipefd);
+                int tmp=socketpair(PF_UNIX, SOCK_STREAM, 0, users[user_count].pipefd);
                 assert(tmp!=-1);
 
                 pid_t pid=fork();
@@ -244,22 +252,93 @@ int main(int argc,char *argv[]){
                     close(sig_pipefd[1]);
                     run_child(user_count, users, share_mem);
                     munmap((void*)share_mem, USER_LIMIT*BUFFER_SIZE);
+                    
                     exit(0);
                 }
                 else{
                     close(connfd);
-                    close(users[user_count].pipefd[0]);
                     close(users[user_count].pipefd[1]);
                     users[user_count].pid=pid;
                     sub_process[pid]=user_count;
+                    addfd(epollfd, users[user_count].pipefd[0]);
                     user_count++;
+                    printf("now %d users\n",user_count);
                 }
             }
             else if(sockfd==sig_pipefd[0]&&(event[i].events&EPOLLIN)){
-
+                int sig;
+                char signals[1024];
+                int len=recv(sig_pipefd[0], signals, 1024, 0);
+                if(len==-1){
+                    continue;
+                }
+                else if(len==0){
+                    continue;
+                }
+                else{
+                    for(int i=0;i<len;i++){
+                        switch (signals[i]) {
+                            case SIGCHLD:{
+                                pid_t pid;
+                                int stat;
+                                while((pid=waitpid(-1,&stat,WNOHANG))>0){
+                                    int del_user=sub_process[pid];
+                                    sub_process[pid]=-1;
+                                    if(del_user==-1||del_user>=USER_LIMIT){
+                                        continue;
+                                    } 
+                                    epoll_ctl(epollfd, EPOLL_CTL_DEL, users[del_user].pipefd[0], 0);
+                                    close(users[del_user].pipefd[0]);
+                                    puts("close0");
+                                    users[del_user]=users[--user_count];
+                                    sub_process[users[del_user].pid]=del_user;
+                                }
+                                if(terminate&&user_count==0){
+                                    stop_server=true;
+                                }
+                                break;
+                            }
+                            case SIGTERM:
+                            case SIGINT:{
+                                printf("kill all child process\n");
+                                if(terminate&&user_count==0){
+                                    stop_server=true;
+                                }
+                                for(int i=0;i<user_count;i++){
+                                    int pid=users[i].pid;
+                                    kill(pid,SIGTERM);
+                                }
+                                terminate=true;
+                                break;
+                            }
+                            default:{
+                                break;
+                            }
+                        }
+                    }
+                }
             }
             else if(event[i].events&EPOLLIN){
-                
+                int child=0;
+                int tmp=recv(sockfd, (char*)&child, sizeof(child), 0);
+                printf("read data from child across pipe\n");
+                if(((char *)&child)[0]==EOF) puts("hhhhh\n");
+                if(tmp<0){
+                    printf("%d\n",errno);
+                    continue;
+                }
+                else if(tmp==0){
+                    printf("sb\n");
+                    continue;
+                }
+                else{
+                    for(int j=0;j<user_count;j++){
+                        if(users[j].pipefd[0]!=sockfd){
+                            printf("send data to child across pipe\n");
+                            send(users[j].pipefd[0], (char*)&child, sizeof(child), 0);
+                        }
+                    }
+                }
             }
         }
     }
