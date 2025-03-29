@@ -8,7 +8,9 @@
 #include <netinet/in.h>
 #include <strings.h>
 #include <sys/epoll.h>
+#include <sys/mman.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
 
 /*HTTP响应的状态信息*/
 const char* ok_200_title="OK";
@@ -230,5 +232,59 @@ http_conn::HTTP_CODE http_conn::process_read(){
     LINE_STATUS line_status=LINE_OK;
     HTTP_CODE ret=NO_REQUEST;
     char* text=nullptr;
-    while()
+    while((m_check_state==CHECK_STATE_CONTENT&&line_status==LINE_OK)||((line_status=parse_line())=LINE_OK)){
+        text=http_conn::get_line();
+        m_start_line=m_checked_idx;
+        printf("get 1 http line %s\n",text);
+        switch (m_check_state) {
+            case CHECK_STATE_REQUESTLINE:{
+                ret=parse_request_line(text);
+                if(ret==BAD_REQUEST){
+                    return BAD_REQUEST;
+                }
+                break;
+            }
+            case CHECK_STATE_HEADER:{
+                ret=parse_headers(text);
+                if(ret==BAD_REQUEST){
+                    return BAD_REQUEST;
+                }
+                if(ret==GET_REQQUEST){
+                    return do_request();
+                }
+                break;
+            }
+            case CHECK_STATE_CONTENT:{
+                ret=parse_content(text);
+                if(ret==GET_REQQUEST){
+                    return do_request();
+                }
+                line_status=LINE_OPEN;
+                break;
+            }
+            default:{
+                return INTERNAL_ERROR;
+            }
+        }
+    }
+    return NO_REQUEST;
+}
+
+http_conn::HTTP_CODE http_conn::do_request(){
+    strcpy(m_read_file,doc_root);
+    int len=strlen(doc_root);
+    strncpy(m_read_file+len, m_url, FILENAME_LEN-len-1);
+    if(stat(m_read_file,&m_file_stat)<0){
+        return NO_RESOURCE;
+    }
+    if(!((m_file_stat.st_mode)&S_IROTH)){
+        return FORBIDDEN_REQUEST;
+    }
+    if(S_ISDIR(m_file_stat.st_mode)){
+        return BAD_REQUEST;
+    }
+    int fd=open(m_read_file, O_RDONLY);
+    m_file_address=(char*)mmap(nullptr, m_file_stat.st_size, PROT_READ, MAP_PRIVATE, fd, 0);
+    close(fd);
+    return FILE_REQUEST;
 }
