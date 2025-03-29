@@ -288,3 +288,10 @@ http_conn::HTTP_CODE http_conn::do_request(){
     close(fd);
     return FILE_REQUEST;
 }
+
+void http_conn::unmap(){
+    if(m_file_address){
+        munmap(m_file_address, m_file_stat.st_size);
+        m_file_address=0;
+    }
+}
