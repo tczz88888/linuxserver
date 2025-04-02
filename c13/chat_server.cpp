@@ -322,7 +322,6 @@ int main(int argc,char *argv[]){
                 int child=0;
                 int tmp=recv(sockfd, (char*)&child, sizeof(child), 0);
                 printf("read data from child across pipe\n");
-                if(((char *)&child)[0]==EOF) puts("hhhhh\n");
                 if(tmp<0){
                     printf("%d\n",errno);
                     continue;

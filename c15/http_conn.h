@@ -30,6 +30,8 @@ class http_conn
     static const int READ_BUFFER_SIZE=2048;
     /*写缓冲区大小*/
     static const int WRITE_BUFFER_SIZE=1024;
+
+    
     /*http请求方法，目前代码只支持get*/
     enum METHOD{
         GET=0,POST,HEAD,PUT,DELETE,TRACE,OPTIONS,CONNECT,PATCH
@@ -49,9 +51,7 @@ class http_conn
         LINE_OK=0,LINE_BAD,LINE_OPEN
     };
 
-    public:
-        http_conn();
-        ~http_conn();
+
     
     public:
         /*初始化新接受的连接*/
@@ -85,10 +85,10 @@ class http_conn
 
         /*以下被process_write调用，以填充HTTP应答*/
         void unmap();
-        bool add_respone(const char* format,...);
+        bool add_response(const char* format,...);
         bool add_content(const char * content);
         bool add_status_line(int status,const char *title);
-        bool add_headers(int content_length);
+        bool add_headers(int content_len);
         bool add_content_length(int content_length);
         bool add_linger();
         bool add_blank_line();
@@ -98,6 +98,7 @@ class http_conn
         static int m_epollfd;
         /*统计用户数量*/
         static int m_user_count;   
+        static int m_done;
     
     private:
         /*该HTTP连接的socket和对方的socket地址*/
